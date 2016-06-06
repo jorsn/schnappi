@@ -1,0 +1,78 @@
+.TH SCHNAPPI "8" "June 2016" "schnappi v0.42" "System Administration Utilities"
+.SH NAME
+schnappi \- a small snapshotting script for btrfs
+.SH SYNOPSIS
+.B schnappi
+.RB \| \-h \||\| \-v \|
+.br
+.B schnappi
+.RB [\| \-s \|]
+.RB [\| \-r \|]
+.RB [\| \-p
+.IR mountpoint \|]
+.RB [\| \-d
+.IR dir \|]
+.RB [\| \-c
+.IR comment \|]
+.RB [\| \-f
+.IR file \|]
+.RB [\| \-m
+none \||
+.RB \| -m
+.IR message \|]
+.IR subvol
+.SH DESCRIPTION
+.B schnappi
+is a small script for making btrfs snapshots with optional commit
+messages (which will reside in \fI<snapshot>/README.md\fR).
+It is based on the btrfs-progs.
+.SH OPTIONS
+.BR \-h
+call for help
+.TP
+.BR \-v
+get version info
+.TP
+.BR \-s
+silent (no interactive message editing)
+.TP
+.BR \-r
+make a readonly snapshot
+.TP
+.BR \-p
+specify a mount point (default: \fI/mnt/btrfs\fR)
+.TP
+.BR \-d
+specify a snapshot dir (relative to the mount point; default: \fI.snapshots\fR)
+.TP
+.BR \-f
+specify a file from which the commit message is read
+.TP
+.BR \-m
+specify the commit message (higher precedence than \fB\-f\fR)
+.SH CONFIGURATION
+You can change the default options at the head of the script.
+The mount point for the btrfs volume must be in \fI/etc/fstab\fR.
+.SH "EXIT STATUS"
+.TP
+.B 0
+Successful program execution.
+.TP
+.B 1
+Non-root user tried execution.
+.TP
+.B 2
+Could not mount btrfs root at \fImount point\fR.
+.TP
+.B 3
+Snapshot destination already exists.
+.TP
+.B 4
+Could not create snapshot.
+.TP
+.B 5
+Could not unmount btrfs root at \fImount point\fR.
+.SH "SEE ALSO"
+.BR btrfs (8),
+.BR btrfs-subvolume (8),
+.BR fstab (5)

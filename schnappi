@@ -1,0 +1,158 @@
+#!/bin/sh
+
+# Copyright (c) 2016 Johannes Rosenberger
+# 
+# This code is released under a BSD Style License.
+# 
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
+# EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+# OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT
+# SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED
+# TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+# BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+# ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
+# DAMAGE.
+# 
+# For more details please read the file '[LICENSE]' in this directory.
+# 
+# [LICENSE]: https://github.com/jorsn/schnappi/blob/master/LICENSE
+
+SELF=$(basename $0)
+VERSION=v0.42
+
+
+# option vars and default settings:
+silent=false
+ro=false
+mountpoint=/mnt/btrfs
+snapdir=.snapshots
+declare comment message subvol
+
+
+if [ -t 1 -a -t 2 ]; then
+styled() {
+	local n=$1
+	shift
+	echo "\e[${n}m$*\e[0m"
+}
+bf() {
+	styled 1 "$*"
+}
+emph() {
+	styled 4 "$*"
+}
+else
+bf() {
+	echo "$*"
+}
+emph() {
+	echo "<$*>"
+}
+fi
+
+
+printerr() {
+	printf '%s: error: %s\n' "$SELF" "$@" >&2
+}
+
+fail() {
+	local err=$1
+	shift
+	printerr "$@"
+	exit $err
+}
+
+exit_help() {
+	printf "$HELP" "$mountpoint" "$snapdir" >&2
+	exit $1
+}
+
+exit_version() {
+	echo "$SELF $VERSION" >&2
+	exit 0
+}
+
+if [ "$EUID" != 0 ]; then
+	fail 1 'Sorry, only root allowed.'
+fi
+
+
+date=$(date -I)
+
+HELP="$(bf Usage:)\t$SELF -h|-v
+	$SELF [-s] [-r] [-p $(emph mount point)] [-d $(emph dir)] [-c $(emph comment)] \\
+			[-f $(emph file)] [-m none|$(emph message)] $(emph subvol)
+	  where
+		-h: call for help
+	  	-v: get version info
+		-s: silent (no interactive message editing)
+		-r: make a readonly snapshot
+		-p: specify a mount point (default: %s)
+		-d: specify a snapshot dir (relative to the mount point; default: %s)
+		-f: specify a file from which the commit message is read
+		-m: specify the commit message (higher precedence than -f)
+"
+
+
+while getopts hvsrp:d:c:f:m: opt; do
+	case "$opt" in
+		h ) exit_help 0;;
+		v ) exit_version;;
+		s ) silent=true;;
+		r ) ro=true;;
+		p ) mountpoint="$OPTARG";;
+		d ) snapdir="$OPTARG";;
+		c ) comment="$(echo $OPTARG | sed 's/\s/_/g')";;
+		f ) test "$message" || message="$(< "$OPTARG")";;
+		m ) message="$OPTARG";;
+		? ) exit_help 666;;
+	esac
+done
+shift $(($OPTIND - 1))
+
+if [ "$1" ]; then
+	subvol="$1"
+else
+	printerr "no subvolume specified"
+	exit_help 666
+fi
+
+
+name="$date"
+$ro && name="${name}-ro"
+name="${name}-${comment:-$(date +%s)}"
+
+destdir="$snapdir/$subvol"
+dest="$destdir/$name"
+readme="$dest/README.md"
+
+grep -E "^[^ ]+ $mountpoint " /proc/mounts 2>&1 > /dev/null && mount=false || mount=true
+if $mount; then
+	mount "$mountpoint"
+	ret=$?
+	test $ret -eq 0 -o $ret -eq 32 || fail 2 "could not mount btrfs root at $mountpoint"
+fi
+
+cd "$mountpoint"
+test -d "$destdir" || mkdir -p "$destdir"
+test -e "$dest" && fail 3 "destination $dest already exists"
+
+if btrfs subvolume snapshot "$subvol" "$dest"; then
+	if [ "${message:="Snapshot from $(uname -a) at $date"}" != none ]; then
+		printf "%s" "$message" > "$readme"
+		$silent || $VISUAL "$readme"
+	fi
+	$ro && btrfs property set -t s "$dest" ro true
+else
+	printerr "could not create snapshot: $subvol -> $dest"
+	fail 4 "$mountpoint is still mounted."
+fi
+
+if $mount; then
+	cd $OLDPWD
+	umount "$mountpoint"
+	ret=$?
+	test $ret -eq 0 -o $ret -eq 32 || fail 5 "could not unmount btrfs root at $mountpoint"
+fi
