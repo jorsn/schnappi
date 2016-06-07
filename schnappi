@@ -107,7 +107,7 @@ while getopts hvsrp:d:c:f:m: opt; do
 		c ) comment="$(echo $OPTARG | sed 's/\s/_/g')";;
 		f ) test "$message" || message="$(< "$OPTARG")";;
 		m ) message="$OPTARG";;
-		? ) exit_help 666;;
+		? ) exit_help 65;;
 	esac
 done
 shift $(($OPTIND - 1))
@@ -116,7 +116,7 @@ if [ "$1" ]; then
 	subvol="$1"
 else
 	printerr "no subvolume specified"
-	exit_help 666
+	exit_help 66
 fi
 
 
